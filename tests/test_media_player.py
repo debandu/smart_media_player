@@ -31,20 +31,40 @@ from PySide6.QtMultimedia import QMediaPlayer
 
 import MediaPlayer as player_pkg
 from MediaPlayer.MediaPlayer import MediaPlayer
-from MediaPlayer.MacPlayer import MacMediaPlayer, _fmt
+from MediaPlayer.MacMediaPlayer import MacMediaPlayer, _fmt
+from MediaPlayer.WindowsMediaPlayer import WindowsMediaPlayer
+from MediaPlayer.LinuxMediaPlayer import LinuxMediaPlayer
+from MediaPlayer.MediaPlayerFactory import MediaPlayerFactory, MEDIA_PLAYERS
+
+
+def _all_descendants(cls):
+    """
+    Every subclass at any depth, not just direct children.
+
+    `cls.__subclasses__()` alone would miss WindowsMediaPlayer and
+    LinuxMediaPlayer: both subclass MacMediaPlayer (to reuse its Qt logic
+    rather than duplicate ~390 lines twice), so they are grandchildren of
+    MediaPlayer, not direct subclasses.
+    """
+    descendants = []
+    for sub in cls.__subclasses__():
+        descendants.append(sub)
+        descendants.extend(_all_descendants(sub))
+    return descendants
 
 
 def _concrete_players():
     """
-    Every concrete MediaPlayer implementation in the package.
+    Every concrete MediaPlayer implementation in the package, at any
+    inheritance depth.
 
     Discovered by importing each module under MediaPlayer/, so a player added
-    for Windows or Linux is covered by the conformance tests below without this
+    for a new platform is covered by the conformance tests below without this
     file being touched.
     """
     for module in pkgutil.iter_modules(player_pkg.__path__):
         importlib.import_module(f"{player_pkg.__name__}.{module.name}")
-    return [cls for cls in MediaPlayer.__subclasses__() if not inspect.isabstract(cls)]
+    return [cls for cls in _all_descendants(MediaPlayer) if not inspect.isabstract(cls)]
 
 
 def _instantiate(impl):
@@ -246,6 +266,71 @@ class TestMacMediaPlayerContract(MediaPlayerBehaviourContract):
         p.audio = MagicMock()
         yield p
         p.window.close()
+
+
+class TestWindowsMediaPlayerContract(MediaPlayerBehaviourContract):
+    """
+    Runs the shared contract against the real WindowsMediaPlayer.
+
+    WindowsMediaPlayer has no code of its own — it subclasses MacMediaPlayer
+    verbatim (see WindowsMediaPlayer.py). This class exists so a future edit
+    that gives WindowsMediaPlayer real overrides is held to the same contract
+    automatically, and so CI's windows-latest runner exercises the real class
+    by name, not just its parent.
+    """
+
+    @pytest.fixture
+    def contract_player(self, qapp):
+        p = WindowsMediaPlayer(width=400, height=300)
+        p.player = _RecordingBackend()
+        p.audio = MagicMock()
+        yield p
+        p.window.close()
+
+
+class TestLinuxMediaPlayerContract(MediaPlayerBehaviourContract):
+    """Runs the shared contract against the real LinuxMediaPlayer. See TestWindowsMediaPlayerContract."""
+
+    @pytest.fixture
+    def contract_player(self, qapp):
+        p = LinuxMediaPlayer(width=400, height=300)
+        p.player = _RecordingBackend()
+        p.audio = MagicMock()
+        yield p
+        p.window.close()
+
+
+# ---------------------------------------------------------------------------
+# MediaPlayerFactory — platform dispatch
+# ---------------------------------------------------------------------------
+
+class TestMediaPlayerFactory:
+    @pytest.mark.parametrize("system, expected", [
+        ("Darwin", MacMediaPlayer),
+        ("Windows", WindowsMediaPlayer),
+        ("Linux", LinuxMediaPlayer),
+    ])
+    def test_dispatches_by_platform_name(self, system, expected):
+        assert MediaPlayerFactory.get_media_player(system) is expected
+
+    def test_unrecognised_platform_falls_back_rather_than_raising(self):
+        """
+        All three registered players are the same Qt implementation, so an
+        unknown `platform.system()` string (e.g. "Java" under Jython, or an
+        unusual container runtime) should still return something usable —
+        mirroring ExploreFactory's fallback for an unrecognised explorer name —
+        rather than crash main.py with a KeyError on its very first line.
+        """
+        assert MediaPlayerFactory.get_media_player("SomeFutureOS") is MacMediaPlayer
+
+    def test_defaults_to_the_real_platform_when_unspecified(self):
+        """main.py calls get_media_player() with no argument."""
+        cls = MediaPlayerFactory.get_media_player()
+        assert cls in MEDIA_PLAYERS.values()
+
+    def test_returns_a_class_not_an_instance(self):
+        """main.py calls the result with constructor args: `cls(width=..., height=...)`."""
+        assert inspect.isclass(MediaPlayerFactory.get_media_player("Darwin"))
 
 
 # ---------------------------------------------------------------------------

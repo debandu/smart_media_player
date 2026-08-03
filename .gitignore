@@ -22,7 +22,7 @@ chroma_db/
 *.mov
 *.mkv
 *.avi
-.github/workflows
+.github/workflows/
 
 # macOS
 .DS_Store

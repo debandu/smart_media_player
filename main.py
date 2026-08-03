@@ -4,7 +4,7 @@ import re
 from FileExplorer.FileExplorer import FileExplorer
 from FileExplorer.ExplorerFactory import ExploreFactory
 from Transcribe.Transcriber import TranscriptionPipeline
-from MediaPlayer.MacPlayer import MacMediaPlayer
+from MediaPlayer.MediaPlayerFactory import MediaPlayerFactory
 import threading
 from constants import CHROMA_DB_PATH
 from RAGSystem.Rag import RAG
@@ -97,7 +97,7 @@ def on_search(query: str):
 
 def play_video(filename: str):
     global media_player
-    media_player = MacMediaPlayer(width=900, height=600)
+    media_player = MediaPlayerFactory.get_media_player()(width=900, height=600)
     media_player.open(filename=filename)
     media_player.play()
     media_player.search_requested.connect(on_search)
