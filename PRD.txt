@@ -1,5 +1,0 @@
-- The media player must have support multiple type of video files.
-- It must be able to transcribe the video properly, along with the timeline of the transcribe.
-- It must support multiple type of llms offline as well as online supporting models.
-- it must be able to support multiple type of RAG system.
-- It must also allow a user to search from files and select and open from the media player's file explorer.

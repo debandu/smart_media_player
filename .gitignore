@@ -6,9 +6,8 @@
 venv/
 env/
 
-*/__pycache__/
-
 # Python
+*/__pycache__/
 __pycache__/
 *.py[cod]
 *.pyo
@@ -23,6 +22,7 @@ chroma_db/
 *.mov
 *.mkv
 *.avi
+tests/
 
 # macOS
 .DS_Store
@@ -31,3 +31,9 @@ chroma_db/
 .vscode/
 .idea/
 *.swp
+
+# md files
+ARCHITECTURE.md
+HANDOVER.md
+STEPS.md
+SUMMARY.md
