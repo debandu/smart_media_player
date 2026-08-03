@@ -1,6 +1,8 @@
 # Smart Media Player
 
-> **Platform: macOS only** (Windows / Linux support not yet implemented)
+> **Platform: macOS, Windows, and Linux.** The player is built entirely on PySide6/Qt6, which
+> runs natively on all three — `MediaPlayerFactory` picks the right class for the OS you're on.
+> CI runs the full suite on both Linux and Windows runners on every PR.
 
 AI-powered Python video player. Describe any scene in plain English and it jumps straight to that moment. Auto-transcribes with Whisper in the background, uses RAG (ChromaDB + LLM) for scene search. Full playback controls built with PySide6/Qt6. Swap transcription and LLM backends freely.
 
@@ -22,10 +24,21 @@ AI-powered Python video player. Describe any scene in plain English and it jumps
 - `ffmpeg` and `ffprobe` installed and on your PATH
 - A Groq API key (or any OpenAI-compatible endpoint)
 
-### Install ffmpeg (macOS)
+### Install ffmpeg
 
+macOS:
 ```bash
 brew install ffmpeg
+```
+
+Windows ([Chocolatey](https://chocolatey.org/)):
+```powershell
+choco install ffmpeg
+```
+
+Linux (Debian/Ubuntu):
+```bash
+sudo apt install ffmpeg
 ```
 
 ---
@@ -96,21 +109,30 @@ A file picker will open — select any `.mp4`, `.mov`, `.mkv`, or `.avi` file. T
 
 ```
 smart-media-player/
-├── main.py                   # Entry point
-├── constants.py              # Loads env variables
+├── main.py                     # Entry point
+├── constants.py                # Loads env variables
 ├── requirements.txt
+├── requirements-dev.txt        # + pytest, pytest-mock, pyflakes
 ├── FileExplorer/
-│   ├── FileExplorer.py       # Abstract file picker
-│   ├── ExplorerFactory.py    # Factory to get a picker by name
+│   ├── FileExplorer.py         # Abstract file picker
+│   ├── ExplorerFactory.py      # Factory to get a picker by name
 │   └── TkinterFileExplorer.py
 ├── MediaPlayer/
-│   ├── MediaPlayer.py        # Abstract player interface
-│   └── MacPlayer.py          # PySide6/Qt6 implementation
+│   ├── MediaPlayer.py          # Abstract player interface
+│   ├── MacMediaPlayer.py       # PySide6/Qt6 implementation
+│   ├── WindowsMediaPlayer.py   # Same implementation, run on Windows
+│   ├── LinuxMediaPlayer.py     # Same implementation, run on Linux
+│   └── MediaPlayerFactory.py   # Picks the right one for platform.system()
 ├── Transcribe/
-│   └── Transcriber.py        # Whisper offline + OpenAI online backends
-└── RAGSystem/
-    └── Rag.py                # ChromaDB + LangChain RAG pipeline
+│   └── Transcriber.py          # Whisper offline + OpenAI online backends
+├── RAGSystem/
+│   └── Rag.py                  # ChromaDB + LangChain RAG pipeline
+└── tests/                      # pytest suite — see CONTRIBUTING.md
 ```
+
+`WindowsMediaPlayer` and `LinuxMediaPlayer` are thin subclasses of `MacMediaPlayer` — nothing in
+its implementation calls a macOS-specific API, so there was no OS-specific logic to write. The
+factory just gives each platform its own class name.
 
 ---
 

@@ -6,7 +6,13 @@ Thanks for your interest in contributing! Please read this before you start.
 
 ## Platform
 
-This project currently runs on **macOS only**. Contributions that add Windows or Linux support are very welcome.
+This project runs on **macOS, Windows, and Linux** — the player is built on PySide6/Qt6, which
+is cross-platform, and `MediaPlayerFactory` selects the right class for the OS you're on. CI
+runs the suite on Linux and Windows runners on every PR; macOS is covered by local development.
+
+If you're adding a genuinely OS-specific behaviour (native taskbar integration, desktop-file
+association, etc.), it belongs as an override on the relevant `*MediaPlayer` subclass — see
+`ARCHITECTURE.md` §6 for the pattern.
 
 ---
 
@@ -135,4 +141,4 @@ Open an issue with:
 - What you did
 - What you expected to happen
 - What actually happened
-- Your macOS version and Python version
+- Your OS (and version) and Python version
