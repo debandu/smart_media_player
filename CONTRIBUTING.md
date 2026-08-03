@@ -29,8 +29,18 @@ cd smart-media-player
 ```bash
 python -m venv venv
 source venv/bin/activate
-pip install -r requirements.txt
+pip install -r requirements-dev.txt
 ```
+
+`requirements-dev.txt` includes everything in `requirements.txt` plus the test
+tooling, so it is the only file you need to install. Check your setup works:
+
+```bash
+python -m pytest tests/ -v
+```
+
+All tests should pass. They need no display, no GPU, no API key, and no network
+— every external call is mocked and Qt runs headless.
 
 Create a `.env` file in the project root (never commit this file):
 
@@ -68,6 +78,34 @@ git checkout -b feature/your-feature-name
 - Do not hardcode API keys or file paths
 - Do not commit your `.env`, `chroma_db/`, or any video files
 - Keep changes focused — one feature or fix per PR
+
+### Tests
+
+Every change needs test movement:
+
+| Your change | What's expected |
+|---|---|
+| New function or method | Tests for the happy path, edge cases, and failure mode |
+| Bug fix | A regression test — verify it **fails** before your fix and passes after |
+| Behaviour change | Update the existing assertions; don't delete the test |
+| Pure refactor | Existing tests must pass **unmodified** |
+
+Run the full suite before you push:
+
+```bash
+python -m pytest tests/ -v
+```
+
+Two rules worth knowing:
+
+- **Never assert against a copy of the code under test.** If something seems
+  untestable, find a way to reach the real object — re-implementing it in the
+  test file silently loses all coverage.
+- **A passing test is not proof of coverage.** For a regression test, break the
+  fix and confirm the test actually fails.
+
+CI runs the same suite on every PR (Python 3.10 and 3.13), so a failure here
+blocks the merge.
 
 ---
 
