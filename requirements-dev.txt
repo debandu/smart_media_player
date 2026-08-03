@@ -1,0 +1,12 @@
+# Development and test dependencies.
+#
+#   pip install -r requirements-dev.txt
+#
+# Includes everything in requirements.txt, so this is the only file a
+# contributor needs to install.
+
+-r requirements.txt
+
+pytest==9.1.1
+pytest-mock==3.15.1
+pyflakes==3.4.0
