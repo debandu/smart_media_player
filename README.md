@@ -53,23 +53,37 @@ git clone https://github.com/your-username/smart-media-player.git
 cd smart-media-player
 ```
 
-### 2. Create and activate a virtual environment
+### Option A — Automatic (recommended)
+
+Run the setup launcher. It creates the venv, installs dependencies, and generates a `.env` template in one step:
 
 ```bash
+python run.py
+```
+
+On first run it will stop and print:
+
+```
+[action required] Edit .env and replace the placeholder GROQ_API_KEY, then run `python run.py` again.
+```
+
+Open `.env`, fill in your key, then run `python run.py` again — it will launch the app directly.
+
+> Get a free Groq API key at [console.groq.com](https://console.groq.com).
+
+### Option B — Manual
+
+```bash
+# 2. Create and activate a virtual environment
 python -m venv venv
 source venv/bin/activate        # macOS / Linux
 venv\Scripts\activate           # Windows
-```
 
-### 3. Install dependencies
-
-```bash
+# 3. Install dependencies
 pip install -r requirements.txt
 ```
 
-### 4. Create a `.env` file
-
-Create a `.env` file in the project root:
+Then create a `.env` file in the project root:
 
 ```env
 GROQ_API_KEY=your_groq_api_key_here
@@ -84,6 +98,12 @@ CHROMA_DB_PATH=./chroma_db
 
 ## Run
 
+**Option A** (if you used the launcher):
+```bash
+python run.py
+```
+
+**Option B** (if you set up manually):
 ```bash
 python main.py
 ```
@@ -99,8 +119,7 @@ A file picker will open — select any `.mp4`, `.mov`, `.mkv`, or `.avi` file. T
 | ▶ / ⏸ | Play / Pause |
 | ⏹ Stop | Stop playback |
 | ⏮ 10s / 10s ⏭ | Skip backward / forward 10 seconds |
-| Seek bar | Click or drag to any position |
-| Seek bar | Grey segments on the seek bar show which minutes are indexed and searchable; green shows the played portion |
+| Seek bar | Click or drag to any position; grey segments show indexed (searchable) minutes, green shows played portion |
 | 🔊 Slider | Adjust volume |
 | Speed dropdown | 0.25× – 2.0× playback speed |
 | Search box + Go | Describe a scene → jump to it |
@@ -111,7 +130,8 @@ A file picker will open — select any `.mp4`, `.mov`, `.mkv`, or `.avi` file. T
 
 ```
 smart-media-player/
-├── main.py                     # Entry point
+├── run.py                      # Setup launcher — creates venv, installs deps, generates .env
+├── main.py                     # App entry point (called by run.py)
 ├── constants.py                # Loads env variables
 ├── requirements.txt
 ├── requirements-dev.txt        # + pytest, pytest-mock, pyflakes
