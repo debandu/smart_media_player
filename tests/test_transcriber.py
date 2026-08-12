@@ -230,3 +230,77 @@ class TestTranscriptionPipeline:
     def test_default_transcriber_is_whisper(self):
         pipeline = TranscriptionPipeline()
         assert isinstance(pipeline.transcriber, WhisperOfflineTranscriber)
+
+    def test_run_passes_time_offset_to_transcriber(self, tmp_path):
+        video = tmp_path / "chunk.wav"
+        video.touch()
+        fake = self._fake_transcript()
+        mock_transcriber = MagicMock()
+        mock_transcriber.transcribe.return_value = fake
+        pipeline = TranscriptionPipeline(transcriber=mock_transcriber, prefer_subtitle=False)
+
+        pipeline.run(str(video), time_offset_sec=120.0)
+
+        mock_transcriber.transcribe.assert_called_once_with(video, time_offset_sec=120.0)
+
+    def test_run_defaults_time_offset_to_zero(self, tmp_path):
+        video = tmp_path / "chunk.wav"
+        video.touch()
+        fake = self._fake_transcript()
+        mock_transcriber = MagicMock()
+        mock_transcriber.transcribe.return_value = fake
+        pipeline = TranscriptionPipeline(transcriber=mock_transcriber, prefer_subtitle=False)
+
+        pipeline.run(str(video))
+
+        _, kwargs = mock_transcriber.transcribe.call_args
+        assert kwargs.get("time_offset_sec", 0.0) == 0.0
+
+
+class TestWhisperOfflineTranscriberOffset:
+    """Verifies that time_offset_sec shifts all segment timestamps."""
+
+    def test_offset_is_added_to_segment_start_and_end(self):
+        from Transcribe.Transcriber import WhisperOfflineTranscriber
+
+        transcriber = WhisperOfflineTranscriber()
+
+        fake_seg = MagicMock()
+        fake_seg.start = 5.0   # 5s into the chunk
+        fake_seg.end = 10.0
+        fake_seg.text = "Hello"
+
+        fake_info = MagicMock()
+        fake_info.language = "en"
+
+        mock_model = MagicMock()
+        mock_model.transcribe.return_value = ([fake_seg], fake_info)
+
+        with patch("faster_whisper.WhisperModel", return_value=mock_model):
+            result = transcriber.transcribe(Path("/fake/chunk.wav"), time_offset_sec=60.0)
+
+        # segment was at 5–10 s inside the chunk; chunk started at 60 s
+        assert result.segments[0].start_ms == 65_000
+        assert result.segments[0].end_ms == 70_000
+
+    def test_zero_offset_leaves_timestamps_unchanged(self):
+        from Transcribe.Transcriber import WhisperOfflineTranscriber
+
+        transcriber = WhisperOfflineTranscriber()
+
+        fake_seg = MagicMock()
+        fake_seg.start = 3.0
+        fake_seg.end = 7.0
+        fake_seg.text = "Hi"
+
+        fake_info = MagicMock()
+        fake_info.language = "en"
+
+        mock_model = MagicMock()
+        mock_model.transcribe.return_value = ([fake_seg], fake_info)
+
+        with patch("faster_whisper.WhisperModel", return_value=mock_model):
+            result = transcriber.transcribe(Path("/fake/chunk.wav"), time_offset_sec=0.0)
+
+        assert result.segments[0].start_ms == 3_000
+        assert result.segments[0].end_ms == 7_000

@@ -33,7 +33,6 @@ chroma_db/
 *.swp
 
 # md files
-ARCHITECTURE.md
 HANDOVER.md
 STEPS.md
 SUMMARY.md

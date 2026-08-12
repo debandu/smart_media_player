@@ -137,6 +137,39 @@ class TestRAGRetrieveFromDb:
         mock_chain.invoke.assert_called_once()
         assert result == "Answer here"
 
+    def test_retrieve_timestamp_from_context_uses_custom_model_and_prompt(self):
+        chunks = [Document(page_content="[120s] the explosion happens")]
+        rag = self._make_rag_with_chunks(chunks)
+
+        mock_model = MagicMock()
+        mock_prompt = MagicMock()
+        mock_chain = MagicMock()
+        mock_chain.invoke.return_value = MagicMock(content="120")
+        mock_prompt.__or__ = MagicMock(return_value=mock_chain)
+
+        result = rag.retrieve_timestamp_from_context(
+            content="the explosion", model=mock_model, prompt=mock_prompt
+        )
+        mock_prompt.__or__.assert_called_once_with(mock_model)
+        mock_chain.invoke.assert_called_once()
+        assert result == "120"
+
+    def test_retrieve_timestamp_passes_content_and_context_to_chain(self):
+        chunks = [Document(page_content="[30s] intro scene")]
+        rag = self._make_rag_with_chunks(chunks)
+
+        mock_model = MagicMock()
+        mock_prompt = MagicMock()
+        mock_chain = MagicMock()
+        mock_chain.invoke.return_value = MagicMock(content="30")
+        mock_prompt.__or__ = MagicMock(return_value=mock_chain)
+
+        rag.retrieve_timestamp_from_context("intro", model=mock_model, prompt=mock_prompt)
+
+        call_kwargs = mock_chain.invoke.call_args[0][0]
+        assert call_kwargs["content"] == "intro"
+        assert "context" in call_kwargs
+
     def test_retrieve_from_db_with_timestamp_uses_transcribed_data(self):
         chunks = [Document(page_content="ctx")]
         rag = self._make_rag_with_chunks(chunks)

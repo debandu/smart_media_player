@@ -126,7 +126,7 @@ class Transcriber(ABC):
     """Implement this once per backend (offline / online) and swap freely."""
 
     @abstractmethod
-    def transcribe(self, video_path: Path) -> Transcript:
+    def transcribe(self, video_path: Path, time_offset_sec: float = 0.0) -> Transcript:
         ...
 
 
@@ -138,16 +138,17 @@ class WhisperOfflineTranscriber(Transcriber):
         self.device = device
         self.compute_type = compute_type
 
-    def transcribe(self, video_path: Path) -> Transcript:
+    def transcribe(self, video_path: Path, time_offset_sec: float = 0.0) -> Transcript:
         from faster_whisper import WhisperModel  # lazy import — optional dependency
 
         model = WhisperModel(self.model_size, device=self.device, compute_type=self.compute_type)
         segments_iter, info = model.transcribe(str(video_path))
+        offset_ms = int(time_offset_sec * 1000)
 
         segments = [
             TranscriptSegment(
-                start_ms=int(seg.start * 1000),
-                end_ms=int(seg.end * 1000),
+                start_ms=int(seg.start * 1000) + offset_ms,
+                end_ms=int(seg.end * 1000) + offset_ms,
                 text=seg.text.strip(),
                 source="asr",
             )
@@ -162,10 +163,11 @@ class OpenAIOnlineTranscriber(Transcriber):
     def __init__(self, model: str = "whisper-1"):
         self.model = model
 
-    def transcribe(self, video_path: Path) -> Transcript:
+    def transcribe(self, video_path: Path, time_offset_sec: float = 0.0) -> Transcript:
         from openai import OpenAI  # lazy import — optional dependency
 
         client = OpenAI()
+        offset_ms = int(time_offset_sec * 1000)
         with open(video_path, "rb") as f:
             response = client.audio.transcriptions.create(
                 model=self.model, file=f, response_format="verbose_json"
@@ -173,8 +175,8 @@ class OpenAIOnlineTranscriber(Transcriber):
 
         segments = [
             TranscriptSegment(
-                start_ms=int(seg["start"] * 1000),
-                end_ms=int(seg["end"] * 1000),
+                start_ms=int(seg["start"] * 1000) + offset_ms,
+                end_ms=int(seg["end"] * 1000) + offset_ms,
                 text=seg["text"].strip(),
                 source="asr",
             )
@@ -198,7 +200,7 @@ class TranscriptionPipeline:
         self.prefer_subtitle = prefer_subtitle
         self.extractor = SubtitleExtractor()
 
-    def run(self, video_path: str | Path) -> Transcript:
+    def run(self, video_path: str | Path, time_offset_sec: float = 0.0) -> Transcript:
         video_path = Path(video_path)
 
         if self.prefer_subtitle:
@@ -206,7 +208,7 @@ class TranscriptionPipeline:
             if existing:
                 return existing
 
-        return self.transcriber.transcribe(video_path)
+        return self.transcriber.transcribe(video_path, time_offset_sec=time_offset_sec)
 
 
 if __name__ == "__main__":

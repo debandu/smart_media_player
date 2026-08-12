@@ -4,6 +4,7 @@ import re
 from FileExplorer.FileExplorer import FileExplorer
 from FileExplorer.ExplorerFactory import ExploreFactory
 from Transcribe.Transcriber import TranscriptionPipeline
+from Transcribe.VideoChunker import VideoChunker
 from MediaPlayer.MediaPlayerFactory import MediaPlayerFactory
 import threading
 from constants import CHROMA_DB_PATH
@@ -54,41 +55,53 @@ if not filename:
     sys.exit()
 
 
-def start_transcribe(filename: str) -> dict:
-    pipeline = TranscriptionPipeline()
-    result = pipeline.run(filename)
-    return result.__dict__
-
-def extract_content(transcribed_data: dict) -> str:
-    transcribed_content = []
-    for content in transcribed_data.get("segments"):
-        transcribed_content.append(content.text)
-    
-    return " ".join(transcribed_content)
-
 rag: RAG = None
+media_player = None
 
 def start_llm_pipeline(filename: str):
-    global rag, transcribed_data
-    transcribed_data = start_transcribe(filename)
-    transcribed_content = extract_content(transcribed_data)
+    """
+    Splits the video into 1-minute audio chunks, transcribes each one, stores
+    it in the vector DB immediately, then signals the player to draw a marker.
+    The player becomes searchable after the very first chunk is done.
+    """
+    global rag, media_player
     rag = RAG(db_path=CHROMA_DB_PATH)
-    rag.store_to_db(content=transcribed_content)
-    print("RAG ready.")
+    chunker = VideoChunker(chunk_duration=60)
+    pipeline = TranscriptionPipeline()
+
+    for chunk_path, start_sec, end_sec in chunker.split_iter(filename):
+        try:
+            transcript = pipeline.run(chunk_path, time_offset_sec=start_sec)
+            if transcript.segments:
+                # Store segments with embedded timestamps so the LLM can read them
+                lines = [
+                    f"[{seg.start_ms // 1000}s] {seg.text}"
+                    for seg in transcript.segments
+                ]
+                rag.store_to_db(content="\n".join(lines))
+            if media_player is not None:
+                media_player.chunk_ready.emit(start_sec, end_sec)
+            print(f"Indexed [{start_sec:.0f}s – {end_sec:.0f}s]")
+        except Exception as e:
+            print(f"Chunk [{start_sec:.0f}s – {end_sec:.0f}s] failed: {e}")
+
+    print("All chunks indexed — full video searchable.")
+
 
 def on_search(query: str):
-    """Called (on the main thread via signal) when the user clicks Go."""
+    """Called when the user clicks Go. Runs the RAG query on a background thread."""
     def _run():
-        global rag, media_player, transcribed_data
-        answer = rag.retrieve_from_db_with_start_timestamp(
-            content=query,
-            transcribed_data=transcribed_data
-        )
+        global rag, media_player
+        if rag is None:
+            print("RAG not ready yet — no chunks indexed.")
+            media_player.seek_to.emit(-1)
+            return
+        answer = rag.retrieve_timestamp_from_context(content=query)
         print(f"LLM answer: {answer}")
         seconds = _parse_seconds(answer)
         if seconds is None:
             print("Could not find a timestamp in the LLM response — no seek performed.")
-            media_player.seek_to.emit(-1)   # signals Go button to re-enable without seeking
+            media_player.seek_to.emit(-1)
             return
         print(f"Seeking to {seconds}s")
         media_player.seek_to.emit(seconds)

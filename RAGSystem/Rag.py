@@ -58,6 +58,31 @@ class RAG:
         chain = prompt | model
         return chain.invoke({"context": context, "question": question}).content
     
+    def retrieve_timestamp_from_context(self, content: str, model: BaseChatModel = None, prompt: BasePromptTemplate = None) -> str:
+        """
+        Find the start timestamp (in seconds) for a scene described by `content`.
+        Works purely from the vector DB context — no full transcript dict needed.
+        Each stored segment must be formatted as "[Xs] text" so the LLM can read
+        the timestamp directly from the retrieved chunks.
+        """
+        model = ChatOpenAI(model=MODEL, base_url=BASE_URL, temperature=0.3, api_key=GROQ_API_KEY) if model is None else model
+        prompt = ChatPromptTemplate.from_template("""
+        The context below contains timestamped transcript segments from a video.
+        Each line looks like "[Xs] some dialogue" where X is the time in seconds.
+
+        Find the segment that best matches the scene described and return ONLY the
+        start time as a plain number in seconds. No units, no explanation.
+
+        Scene to find: {content}
+
+        Context:
+        {context}
+        """) if prompt is None else prompt
+        chunks = self.similarity_search(content=content, k=10)
+        context = "\n".join(c.page_content for c in chunks)
+        chain = prompt | model
+        return chain.invoke({"context": context, "content": content}).content
+
     def retrieve_from_db_with_start_timestamp(self, content: str, transcribed_data: dict, model: BaseChatModel = None, prompt: BasePromptTemplate = None):
         model = ChatOpenAI(model=MODEL, base_url=BASE_URL, temperature=0.3, api_key=GROQ_API_KEY) if model is None else model
         prompt = ChatPromptTemplate.from_template("""
