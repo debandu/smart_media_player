@@ -27,6 +27,7 @@ from unittest.mock import MagicMock
 
 import pytest
 
+from PySide6.QtCore import Qt
 from PySide6.QtMultimedia import QMediaPlayer
 
 import MediaPlayer as player_pkg
@@ -87,11 +88,10 @@ def _instantiate(impl):
 
 CONCRETE_PLAYERS = _concrete_players()
 
-# main.py drives the player through these two signals. They are NOT declared on
-# the MediaPlayer ABC, so a player can satisfy all 24 abstract methods, import
-# and instantiate cleanly, and still crash main.py at runtime. Pinned here until
-# the ABC is widened — see HANDOVER.md defect #7.
-REQUIRED_SIGNALS = ("seek_to", "search_requested")
+# main.py drives the player through these signals. They are NOT declared on the
+# MediaPlayer ABC, so a player can satisfy all 24 abstract methods and still
+# crash main.py at runtime. Pinned here until the ABC is widened — defect #7.
+REQUIRED_SIGNALS = ("seek_to", "search_requested", "chunk_ready")
 
 
 @pytest.fixture
@@ -553,3 +553,63 @@ class TestSeekToSignalContract:
         player.player.setPosition.assert_not_called()
         assert player._btn_go.isEnabled() is True
         assert player._btn_go.text() == "Go"
+
+
+# ---------------------------------------------------------------------------
+# _ClickSlider marker support — grey RAG-indexed segments on the seek bar
+# ---------------------------------------------------------------------------
+
+class TestClickSliderMarkers:
+    @pytest.fixture
+    def slider(self, qapp):
+        from MediaPlayer.MacMediaPlayer import _ClickSlider
+        s = _ClickSlider(Qt.Horizontal)
+        s.setRange(0, 600_000)
+        s.resize(600, 20)
+        yield s
+        s.close()
+
+    def test_initially_has_no_markers(self, slider):
+        assert slider._markers == []
+
+    def test_add_marker_appends(self, slider):
+        slider.add_marker(0, 60_000)
+        assert len(slider._markers) == 1
+        assert slider._markers[0] == (0, 60_000)
+
+    def test_multiple_markers_accumulate(self, slider):
+        slider.add_marker(0, 60_000)
+        slider.add_marker(60_000, 120_000)
+        assert len(slider._markers) == 2
+        assert slider._markers[1] == (60_000, 120_000)
+
+
+# ---------------------------------------------------------------------------
+# chunk_ready signal — cross-thread marker updates
+# ---------------------------------------------------------------------------
+
+class TestChunkReadySignal:
+    def test_chunk_ready_is_connectable_and_emittable(self, player):
+        assert callable(getattr(player.chunk_ready, "connect", None))
+        assert callable(getattr(player.chunk_ready, "emit", None))
+
+    def test_chunk_ready_adds_marker_to_seek(self, player):
+        player._on_duration_changed(600_000)
+        player.chunk_ready.emit(0.0, 60.0)
+        assert len(player._seek._markers) == 1
+        assert player._seek._markers[0] == (0, 60_000)
+
+    def test_chunk_ready_converts_seconds_to_ms(self, player):
+        player._on_duration_changed(600_000)
+        player.chunk_ready.emit(60.0, 120.0)
+        assert player._seek._markers[0] == (60_000, 120_000)
+
+    def test_successive_chunks_accumulate_in_seek(self, player):
+        player._on_duration_changed(600_000)
+        player.chunk_ready.emit(0.0, 60.0)
+        player.chunk_ready.emit(60.0, 120.0)
+        assert len(player._seek._markers) == 2
+
+    def test_duration_change_sets_seek_maximum(self, player):
+        player._on_duration_changed(300_000)
+        assert player._seek.maximum() == 300_000

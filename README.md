@@ -12,9 +12,10 @@ AI-powered Python video player. Describe any scene in plain English and it jumps
 
 1. You pick a video file
 2. The player starts immediately
-3. In the background, Whisper transcribes the audio and indexes it into ChromaDB
-4. Once ready, type any scene description in the search box (e.g. *"the knight's monologue"*) and press **Go**
-5. The LLM finds the matching timestamp and the player jumps to it
+3. In the background, the video is split into 1-minute chunks and each chunk is transcribed with Whisper
+4. As each minute is indexed, a **grey marker** appears on the seek bar — search is available from the very first marker
+5. Type any scene description in the search box (e.g. *"the knight's monologue"*) and press **Go**
+6. The LLM finds the matching timestamp and the player jumps to it
 
 ---
 
@@ -87,7 +88,7 @@ CHROMA_DB_PATH=./chroma_db
 python main.py
 ```
 
-A file picker will open — select any `.mp4`, `.mov`, `.mkv`, or `.avi` file. The player window opens and video starts playing. Transcription runs in the background; the search box becomes usable once indexing is complete (watch the terminal for `RAG ready.`).
+A file picker will open — select any `.mp4`, `.mov`, `.mkv`, or `.avi` file. The player window opens and video starts playing immediately. Transcription runs in 1-minute chunks in the background; a **grey marker** appears on the seek bar for each indexed minute. The search box is usable as soon as the first marker appears.
 
 ---
 
@@ -99,6 +100,7 @@ A file picker will open — select any `.mp4`, `.mov`, `.mkv`, or `.avi` file. T
 | ⏹ Stop | Stop playback |
 | ⏮ 10s / 10s ⏭ | Skip backward / forward 10 seconds |
 | Seek bar | Click or drag to any position |
+| Seek bar | Grey segments on the seek bar show which minutes are indexed and searchable; green shows the played portion |
 | 🔊 Slider | Adjust volume |
 | Speed dropdown | 0.25× – 2.0× playback speed |
 | Search box + Go | Describe a scene → jump to it |
@@ -124,7 +126,8 @@ smart-media-player/
 │   ├── LinuxMediaPlayer.py     # Same implementation, run on Linux
 │   └── MediaPlayerFactory.py   # Picks the right one for platform.system()
 ├── Transcribe/
-│   └── Transcriber.py          # Whisper offline + OpenAI online backends
+│   ├── Transcriber.py          # Whisper offline + OpenAI online backends
+│   └── VideoChunker.py         # Splits video into 1-min WAV chunks for progressive indexing
 ├── RAGSystem/
 │   └── Rag.py                  # ChromaDB + LangChain RAG pipeline
 └── tests/                      # pytest suite — see CONTRIBUTING.md
@@ -152,9 +155,9 @@ pipeline = TranscriptionPipeline(transcriber=OpenAIOnlineTranscriber())
 
 **Use a different LLM:**
 
-Pass a custom `BaseChatModel` to `retrieve_from_db_with_start_timestamp`:
+Pass a custom `BaseChatModel` to `retrieve_timestamp_from_context`:
 ```python
 from langchain_openai import ChatOpenAI
 model = ChatOpenAI(model="gpt-4o", api_key="...")
-rag.retrieve_from_db_with_start_timestamp(content=query, transcribed_data={}, model=model)
+rag.retrieve_timestamp_from_context(content=query, model=model)
 ```

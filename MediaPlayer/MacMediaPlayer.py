@@ -13,6 +13,7 @@ from PySide6.QtWidgets import (
     QSizePolicy,
 )
 from PySide6.QtCore import QUrl, Qt, QTimer, Signal, QObject
+from PySide6.QtGui import QPainter, QColor
 from PySide6.QtMultimedia import QMediaPlayer, QAudioOutput
 from PySide6.QtMultimediaWidgets import QVideoWidget
 
@@ -34,7 +35,15 @@ def _fmt(ms: int) -> str:
 
 
 class _ClickSlider(QSlider):
-    """QSlider that jumps to the clicked position instead of doing a page step."""
+    """QSlider that jumps to the clicked position and paints grey RAG-indexed segments."""
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self._markers: list[tuple[int, int]] = []  # (start_ms, end_ms)
+
+    def add_marker(self, start_ms: int, end_ms: int):
+        self._markers.append((start_ms, end_ms))
+        self.update()
 
     def mousePressEvent(self, event):
         if event.button() == Qt.LeftButton:
@@ -46,6 +55,26 @@ class _ClickSlider(QSlider):
             self.setValue(val)
             self.sliderMoved.emit(val)
         super().mousePressEvent(event)
+
+    def paintEvent(self, event):
+        super().paintEvent(event)
+        if not self._markers or self.maximum() == 0:
+            return
+        painter = QPainter(self)
+        track_h = 4
+        track_y = self.height() // 2 - track_h // 2
+        w = self.width()
+        handle_w = 12  # must match QSlider::handle width in _SLIDER_STYLE
+        # Qt positions the handle so its left edge travels over (w - handle_w) pixels
+        handle_right = int(self.value() / self.maximum() * (w - handle_w)) + handle_w
+        for start_ms, end_ms in self._markers:
+            x1 = int(start_ms / self.maximum() * w)
+            x2 = int(end_ms / self.maximum() * w)
+            draw_from = max(x1, handle_right)
+            draw_to = min(x2, w)
+            if draw_to > draw_from:
+                painter.fillRect(draw_from, track_y, draw_to - draw_from, track_h, QColor("#888888"))
+        painter.end()
 
 
 _SLIDER_STYLE = (
@@ -67,6 +96,7 @@ class MacMediaPlayer(QObject, MediaPlayer, metaclass=_Meta):
 
     seek_to = Signal(float)          # emit from any thread; Qt delivers it on the main thread
     search_requested = Signal(str)   # emitted when the user clicks Go
+    chunk_ready = Signal(float, float)  # (start_sec, end_sec) — emitted after each chunk is indexed
 
     def __init__(self, width=900, height=680, title="Video Player"):
         QObject.__init__(self)
@@ -96,7 +126,7 @@ class MacMediaPlayer(QObject, MediaPlayer, metaclass=_Meta):
         self._root.addWidget(self.video_widget)
 
     def _build_seek_bar(self):
-        """Progress bar with elapsed / total time labels on each side."""
+        """Seek slider with elapsed / total time labels; grey segments mark RAG-indexed regions."""
         row = QHBoxLayout()
 
         self._time_label = QLabel("0:00")
@@ -265,6 +295,7 @@ class MacMediaPlayer(QObject, MediaPlayer, metaclass=_Meta):
         self.seek_to.connect(self.seek_seconds)       # thread-safe seek from background threads
         self.seek_to.connect(self._on_seek_done)      # re-enable Go button after seek
         self.player.playbackStateChanged.connect(self._on_state_changed)
+        self.chunk_ready.connect(self._on_chunk_ready)
 
         self._seeking = False
         self._timer = QTimer()
@@ -277,6 +308,9 @@ class MacMediaPlayer(QObject, MediaPlayer, metaclass=_Meta):
     def _on_duration_changed(self, ms: int):
         self._seek.setRange(0, ms)
         self._dur_label.setText(_fmt(ms))
+
+    def _on_chunk_ready(self, start_sec: float, end_sec: float):
+        self._seek.add_marker(int(start_sec * 1000), int(end_sec * 1000))
 
     def _on_position_changed(self, ms: int):
         if not self._seeking:
